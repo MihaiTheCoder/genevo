@@ -34,12 +34,9 @@ use crate::{
     random::Prng,
 };
 use chrono::Local;
-#[cfg(not(target_arch = "wasm32"))]
-use rayon;
 use std::{
     fmt::{self, Display},
     marker::PhantomData,
-    rc::Rc,
 };
 
 /// The `State` struct holds the results of one pass of the genetic algorithm
@@ -107,7 +104,7 @@ where
     reinserter: R,
     min_population_size: usize,
     initial_population: Population<G>,
-    population: Rc<Vec<G>>
+    population: Vec<G>
 }
 
 impl<G, F, E, S, C, M, R> GeneticAlgorithm<G, F, E, S, C, M, R>
@@ -189,7 +186,7 @@ where
 
         // Stage 4: On to the next generation:
         let next_generation = reinsertion;
-        self.population = Rc::new(next_generation);
+        self.population = next_generation;
         Ok(State {
             evaluated_population: evaluation,
             best_solution: best_solution,
@@ -197,13 +194,13 @@ where
     }
 
     fn reset(&mut self) -> Result<bool, Self::Error> {
-        self.population = Rc::new(self.initial_population.individuals().to_vec());
+        self.population = self.initial_population.individuals().to_vec();
         Ok(true)
     }
 }
 
 fn evaluate_fitness<G, F, E>(
-    population: Rc<Vec<G>>,
+    population: Vec<G>,
     evaluator: &E,
 ) -> EvaluatedPopulation<G, F>
 where
@@ -223,80 +220,27 @@ where
     evaluated
 }
 
-/// Calculates the `genetic::Fitness` value of each `genetic::Genotype` and
-/// records the highest and lowest values.
-#[cfg(not(target_arch = "wasm32"))]
 fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> (Vec<F>, F, F)
 where
     G: Genotype + Sync,
     F: Fitness + Send + Sync,
     E: FitnessFunction<G, F> + Sync,
-{
-    if population.len() < 50 {
-        
-        let mut fitness = Vec::with_capacity(population.len());
-        let mut highest = evaluator.lowest_possible_fitness();
-        let mut lowest = evaluator.highest_possible_fitness();
-        for genome in population.iter() {
-            let score = evaluator.fitness_of(genome);
-            if score > highest {
-                highest = score.clone();
-            }
-            if score < lowest {
-                lowest = score.clone();
-            }
-            fitness.push(score);
+{    
+    let mut fitness = Vec::with_capacity(population.len());
+    let mut highest = evaluator.lowest_possible_fitness();
+    let mut lowest = evaluator.highest_possible_fitness();
+    for genome in population.iter() {
+        let score = evaluator.fitness_of(genome);
+        if score > highest {
+            highest = score.clone();
         }
-        (fitness, highest, lowest)
-        
-    } else {
-        let mid_point = population.len() / 2;
-        let (l_slice, r_slice) = population.split_at(mid_point);
-        let (mut left, mut right) = rayon::join(
-            || par_evaluate_fitness(l_slice, evaluator),
-            || par_evaluate_fitness(r_slice, evaluator),
-        );
-        let mut fitness = Vec::with_capacity(population.len());
-        fitness.append(&mut left.0);
-        fitness.append(&mut right.0);
-        let highest = if left.1 >= right.1 {
-            left.1
-        } else {
-            right.1
-        };
-        let lowest = if left.2 <= right.2 {
-            left.2
-        } else {
-            right.2
-        };
-        (fitness, highest, lowest)
+        if score < lowest {
+            lowest = score.clone();
+        }
+        fitness.push(score);
     }
-}
+    (fitness, highest, lowest)
 
-#[cfg(target_arch = "wasm32")]
-fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> TimedResult<(Vec<F>, F, F)>
-where
-    G: Genotype + Sync,
-    F: Fitness + Send + Sync,
-    E: FitnessFunction<G, F> + Sync,
-{
-    timed(|| {
-        let mut fitness = Vec::with_capacity(population.len());
-        let mut highest = evaluator.lowest_possible_fitness();
-        let mut lowest = evaluator.highest_possible_fitness();
-        for genome in population.iter() {
-            let score = evaluator.fitness_of(genome);
-            if score > highest {
-                highest = score.clone();
-            }
-            if score < lowest {
-                lowest = score.clone();
-            }
-            fitness.push(score);
-        }
-        (fitness, highest, lowest)
-    })
-    .run()
 }
 
 /// Determines the best solution of the current population
@@ -325,7 +269,7 @@ where
 
 /// Lets the parents breed their offspring and mutate its children. And
 /// finally combines the offspring of all parents into one big offspring.
-#[cfg(not(target_arch = "wasm32"))]
+
 fn par_breed_offspring<G, C, M>(
     parents: Vec<Parents<G>>,
     breeder: &C,
@@ -336,61 +280,14 @@ where
     G: Genotype + Send,
     C: CrossoverOp<G> + Sync,
     M: MutationOp<G> + Sync,
-{
-    if parents.len() < 50 {
-       
-        let mut offspring: Offspring<G> = Vec::with_capacity(parents.len() * parents[0].len());
-        for parents in parents {
-            let children = breeder.crossover(parents, rng);
-            for child in children {
-                let mutated = mutator.mutate(child, rng);
-                offspring.push(mutated);
-            }
+{    
+    let mut offspring: Offspring<G> = Vec::with_capacity(parents.len() * parents[0].len());
+    for parents in parents {
+        let children = breeder.crossover(parents, rng);
+        for child in children {
+            let mutated = mutator.mutate(child, rng);
+            offspring.push(mutated);
         }
-        offspring
-       
-    } else {
-        rng.jump();
-        let mut rng1 = rng.clone();
-        rng.jump();
-        let mut rng2 = rng.clone();
-        let mid_point = parents.len() / 2;
-        let mut offspring = Vec::with_capacity(parents.len() * 2);
-        let mut parents = parents;
-        let r_slice = parents.drain(mid_point..).collect();
-        let l_slice = parents;
-        let (mut left, mut right) = rayon::join(
-            || par_breed_offspring(l_slice, breeder, mutator, &mut rng1),
-            || par_breed_offspring(r_slice, breeder, mutator, &mut rng2),
-        );
-        offspring.append(&mut left);
-        offspring.append(&mut right);
-        offspring
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn par_breed_offspring<G, C, M>(
-    parents: Vec<Parents<G>>,
-    breeder: &C,
-    mutator: &M,
-    rng: &mut Prng,
-) -> TimedResult<Offspring<G>>
-where
-    G: Genotype + Send,
-    C: CrossoverOp<G> + Sync,
-    M: MutationOp<G> + Sync,
-{
-    timed(|| {
-        let mut offspring: Offspring<G> = Vec::with_capacity(parents.len() * parents[0].len());
-        for parents in parents {
-            let children = breeder.crossover(parents, rng);
-            for child in children {
-                let mutated = mutator.mutate(child, rng);
-                offspring.push(mutated);
-            }
-        }
-        offspring
-    })
-    .run()
+    offspring   
 }

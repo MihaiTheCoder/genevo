@@ -102,8 +102,6 @@ use crate::{
     random::{get_rng, random_seed, Prng, Rng, Seed},
 };
 use rand::distributions::uniform::SampleUniform;
-#[cfg(not(target_arch = "wasm32"))]
-use rayon;
 use std::{fmt::Debug, marker::PhantomData};
 
 /// The `Population` defines a set of possible solutions to the optimization
@@ -149,39 +147,6 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct PopulationBuilder;
 
-#[cfg(not(target_arch = "wasm32"))]
-impl PopulationBuilder {
-    fn build_population<B, G>(genome_builder: &B, size: usize, mut rng: Prng) -> Population<G>
-    where
-        B: GenomeBuilder<G>,
-        G: Genotype,
-    {
-        if size < 50 {
-            Population {
-                individuals: (0..size)
-                    .map(|index| genome_builder.build_genome(index, &mut rng))
-                    .collect(),
-            }
-        } else {
-            rng.jump();
-            let rng1 = rng.clone();
-            rng.jump();
-            let rng2 = rng.clone();
-            let left_size = size / 2;
-            let right_size = size - left_size;
-            let (left_population, right_population) = rayon::join(
-                || Self::build_population(genome_builder, left_size, rng1),
-                || Self::build_population(genome_builder, right_size, rng2),
-            );
-            let mut right_individuals = right_population.individuals;
-            let mut individuals = left_population.individuals;
-            individuals.append(&mut right_individuals);
-            Population { individuals }
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
 impl PopulationBuilder {
     fn build_population<B, G>(genome_builder: &B, size: usize, mut rng: Prng) -> Population<G>
     where
