@@ -90,6 +90,7 @@ where
     highest_fitness: F,
     lowest_fitness: F,
     average_fitness: F,
+    pub best_evaluation: Evaluated<G, F>,
 }
 
 impl<G, F> EvaluatedPopulation<G, F>
@@ -104,6 +105,7 @@ where
         highest_fitness: F,
         lowest_fitness: F,
         average_fitness: F,
+        best_evaluation: Evaluated<G, F>
     ) -> Self {
         EvaluatedPopulation {
             individuals,
@@ -111,6 +113,7 @@ where
             highest_fitness,
             lowest_fitness,
             average_fitness,
+            best_evaluation
         }
     }
 

@@ -27,7 +27,7 @@ pub mod builder;
 
 use self::builder::EmptyGeneticAlgorithmBuilder;
 use crate::{
-    algorithm::{Algorithm, BestSolution, EvaluatedPopulation},
+    algorithm::{Algorithm, BestSolution, EvaluatedPopulation, Evaluated},
     genetic::{Fitness, FitnessFunction, Genotype, Offspring, Parents},
     operator::{CrossoverOp, MutationOp, ReinsertionOp, SelectionOp},
     population::Population,
@@ -175,7 +175,12 @@ where
 
         // Stage 2: The fitness check:
         let evaluation = evaluate_fitness(self.population.clone(), &self.evaluator);
-        let best_solution = determine_best_solution(iteration, &evaluation);
+        
+        let best_solution = BestSolution {
+            found_at: Local::now(),
+            generation: iteration,
+            solution: evaluation.best_evaluation.clone(),
+        };
 
         // Stage 3: The making of a new population:
         let selection = self.selector.select_from(&evaluation, rng);
@@ -214,13 +219,14 @@ where
         population,
         evaluation.0,
         evaluation.1,
-        evaluation.2,
+        evaluation.2,        
         average,
+        evaluation.3
     );
     evaluated
 }
 
-fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> (Vec<F>, F, F)
+fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> (Vec<F>, F, F, Evaluated<G, F>)
 where
     G: Genotype + Sync,
     F: Fitness + Send + Sync,
@@ -229,17 +235,22 @@ where
     let mut fitness = Vec::with_capacity(population.len());
     let mut highest = evaluator.lowest_possible_fitness();
     let mut lowest = evaluator.highest_possible_fitness();
+    let mut highest_genome = &population[0];
     for genome in population.iter() {
         let score = evaluator.fitness_of(genome);
         if score > highest {
             highest = score.clone();
+            highest_genome = genome;
         }
         if score < lowest {
             lowest = score.clone();
         }
         fitness.push(score);
     }
-    (fitness, highest, lowest)
+    let evaluated = Evaluated {fitness: highest.clone(), genome: highest_genome.clone()};
+    
+
+    (fitness, highest, lowest, evaluated)
 
 }
 
