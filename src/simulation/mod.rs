@@ -1,7 +1,7 @@
 pub mod simulator;
 
 use crate::{
-    algorithm::Algorithm, random::Seed, statistic::ProcessingTime, termination::StopReason,
+    algorithm::Algorithm, random::Seed, termination::StopReason,
 };
 use chrono::{DateTime, Duration, Local};
 
@@ -62,11 +62,6 @@ where
     /// Duration of processing the current iteration. This is the time it
     /// took to process one iteration of the algorithm.
     pub duration: Duration,
-    /// Accumulated time spent by each thread in case of parallel processing.
-    /// In case of sequential processing this time is nearly the same as the
-    /// `duration` value. In case of parallel processing this time is usually
-    /// a multitude of the `duration`.
-    pub processing_time: ProcessingTime,
     /// The result of this iteration.
     pub result: <A as Algorithm>::Output,
 }
@@ -87,5 +82,5 @@ where
     /// * The `State` of last processed generation.
     /// * The total processing time of the simulation.
     /// * The `StopReason` is the matching criteria why the simulation stopped.
-    Final(State<A>, ProcessingTime, Duration, StopReason),
+    Final(State<A>, Duration, StopReason),
 }

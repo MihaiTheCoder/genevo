@@ -126,28 +126,26 @@ fn main() {
                 let best_solution = step.result.best_solution;
                 println!(
                     "Step: generation: {}, average_fitness: {}, \
-                     best fitness: {}, duration: {}, processing_time: {}",
+                     best fitness: {}, duration: {}",
                     step.iteration,
                     evaluated_population.average_fitness(),
                     best_solution.solution.fitness,
                     step.duration.fmt(),
-                    step.processing_time.fmt()
                 );
                 println!("      {}", best_solution.solution.genome.as_text());
                 //                println!("| population: [{}]", result.population.iter().map(|g| g.as_text())
                 //                    .collect::<Vec<String>>().join("], ["));
             },
-            Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
+            Ok(SimResult::Final(step, duration, stop_reason)) => {
                 let best_solution = step.result.best_solution;
                 println!("{}", stop_reason);
                 println!(
                     "Final result after {}: generation: {}, \
-                     best solution with fitness {} found in generation {}, processing_time: {}",
+                     best solution with fitness {} found in generation {}",
                     duration.fmt(),
                     step.iteration,
                     best_solution.solution.fitness,
-                    best_solution.generation,
-                    processing_time.fmt()
+                    best_solution.generation
                 );
                 println!("      {}", best_solution.solution.genome.as_text());
                 break;

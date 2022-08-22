@@ -2,7 +2,6 @@ use crate::{
     algorithm::Algorithm,
     random::{get_rng, random_seed, Prng, Seed},
     simulation::{SimResult, Simulation, SimulationBuilder, State},
-    statistic::{ProcessingTime, TrackProcessingTime},
     termination::{StopFlag, Termination},
 };
 use chrono::{DateTime, Local};
@@ -33,7 +32,7 @@ where
 
 impl<A, T> SimulationBuilder<Simulator<A, T>, A> for SimulatorBuilder<A, T>
 where
-    A: Algorithm + TrackProcessingTime + Debug,
+    A: Algorithm + Debug,
     <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
     T: Termination<A>,
 {
@@ -49,7 +48,6 @@ where
             rng: get_rng(seed),
             started_at: Local::now(),
             iteration: 0,
-            processing_time: ProcessingTime::zero(),
         }
     }
 }
@@ -141,12 +139,11 @@ where
     rng: Prng,
     started_at: DateTime<Local>,
     iteration: u64,
-    processing_time: ProcessingTime,
 }
 
 impl<A, T> Simulator<A, T>
 where
-    A: Algorithm + TrackProcessingTime + Debug,
+    A: Algorithm + Debug,
     <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
     T: Termination<A>,
 {
@@ -160,7 +157,6 @@ where
 
         self.iteration += 1;
         let result = self.algorithm.next(self.iteration, &mut self.rng);
-        self.processing_time += self.algorithm.processing_time();
 
         let loop_duration = Local::now().signed_duration_since(loop_started_at);
         match result {
@@ -168,7 +164,6 @@ where
                 started_at: self.started_at,
                 iteration: self.iteration,
                 duration: loop_duration,
-                processing_time: self.algorithm.processing_time(),
                 result,
             }),
             Err(error) => Err(SimError::AlgorithmError(error)),
@@ -178,7 +173,7 @@ where
 
 impl<A, T> Simulation<A> for Simulator<A, T>
 where
-    A: Algorithm + TrackProcessingTime + Debug,
+    A: Algorithm + Debug,
     <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
     T: Termination<A>,
 {
@@ -210,9 +205,8 @@ where
                     match self.termination.evaluate(&state) {
                         StopFlag::Continue => {}
                         StopFlag::StopNow(reason) => {
-                            let processing_time = self.processing_time;
                             let duration = Local::now().signed_duration_since(self.started_at);
-                            break Ok(SimResult::Final(state, processing_time, duration, reason));
+                            break Ok(SimResult::Final(state, duration, reason));
                         }
                     }
                 }
@@ -246,10 +240,9 @@ where
                     SimResult::Intermediate(state)
                 },
                 StopFlag::StopNow(reason) => {
-                    let processing_time = self.processing_time;
                     let duration = Local::now().signed_duration_since(self.started_at);
                     self.run_mode = RunMode::NotRunning;
-                    SimResult::Final(state, processing_time, duration, reason)
+                    SimResult::Final(state, duration, reason)
                 },
             }))
     }
@@ -283,7 +276,6 @@ where
             RunMode::NotRunning => (),
         }
         self.run_mode = RunMode::NotRunning;
-        self.processing_time = ProcessingTime::zero();
         self.iteration = 0;
         self.algorithm.reset().map_err(SimError::AlgorithmError)
     }

@@ -3,7 +3,6 @@ use crate::{
     genetic::{Fitness, FitnessFunction, Genotype},
     operator::{CrossoverOp, MutationOp, ReinsertionOp, SelectionOp},
     population::Population,
-    statistic::ProcessingTime,
 };
 use std::{marker::PhantomData, rc::Rc};
 
@@ -50,8 +49,7 @@ where
             reinserter: self.reinserter,
             min_population_size: self.min_population_size,
             population: Rc::new(self.initial_population.individuals().to_vec()),
-            initial_population: self.initial_population,
-            processing_time: ProcessingTime::zero(),
+            initial_population: self.initial_population
         }
     }
 

@@ -32,7 +32,6 @@ use crate::{
     operator::{CrossoverOp, MutationOp, ReinsertionOp, SelectionOp},
     population::Population,
     random::Prng,
-    statistic::{timed, ProcessingTime, TimedResult, TrackProcessingTime},
 };
 use chrono::Local;
 #[cfg(not(target_arch = "wasm32"))]
@@ -56,9 +55,6 @@ where
     pub evaluated_population: EvaluatedPopulation<G, F>,
     /// Best solution of this generation.
     pub best_solution: BestSolution<G, F>,
-    /// Processing time for this generation. In case of parallel processing it
-    /// is the accumulated time spent by each thread.
-    pub processing_time: ProcessingTime,
 }
 
 /// An error that can occur during execution of a `GeneticAlgorithm`.
@@ -111,8 +107,7 @@ where
     reinserter: R,
     min_population_size: usize,
     initial_population: Population<G>,
-    population: Rc<Vec<G>>,
-    processing_time: ProcessingTime,
+    population: Rc<Vec<G>>
 }
 
 impl<G, F, E, S, C, M, R> GeneticAlgorithm<G, F, E, S, C, M, R>
@@ -150,21 +145,6 @@ where
     }
 }
 
-impl<G, F, E, S, C, M, R> TrackProcessingTime for GeneticAlgorithm<G, F, E, S, C, M, R>
-where
-    G: Genotype,
-    F: Fitness,
-    E: FitnessFunction<G, F>,
-    S: SelectionOp<G, F>,
-    C: CrossoverOp<G>,
-    M: MutationOp<G>,
-    R: ReinsertionOp<G, F>,
-{
-    fn processing_time(&self) -> ProcessingTime {
-        self.processing_time
-    }
-}
-
 impl<G, F, E, S, C, M, R> Algorithm for GeneticAlgorithm<G, F, E, S, C, M, R>
 where
     G: Genotype,
@@ -198,34 +178,25 @@ where
 
         // Stage 2: The fitness check:
         let evaluation = evaluate_fitness(self.population.clone(), &self.evaluator);
-        let best_solution = determine_best_solution(iteration, &evaluation.result);
+        let best_solution = determine_best_solution(iteration, &evaluation);
 
         // Stage 3: The making of a new population:
-        let selection = timed(|| self.selector.select_from(&evaluation.result, rng)).run();
-        let mut breeding = par_breed_offspring(selection.result, &self.breeder, &self.mutator, rng);
-        let reinsertion = timed(|| {
-            self.reinserter
-                .combine(&mut breeding.result, &evaluation.result, rng)
-        })
-        .run();
+        let selection = self.selector.select_from(&evaluation, rng);
+        let mut breeding = par_breed_offspring(selection, &self.breeder, &self.mutator, rng);
+        let reinsertion = self.reinserter
+                .combine(&mut breeding, &evaluation, rng);
+
 
         // Stage 4: On to the next generation:
-        self.processing_time = evaluation.time
-            + best_solution.time
-            + selection.time
-            + breeding.time
-            + reinsertion.time;
-        let next_generation = reinsertion.result;
+        let next_generation = reinsertion;
         self.population = Rc::new(next_generation);
         Ok(State {
-            evaluated_population: evaluation.result,
-            best_solution: best_solution.result,
-            processing_time: self.processing_time,
+            evaluated_population: evaluation,
+            best_solution: best_solution,
         })
     }
 
     fn reset(&mut self) -> Result<bool, Self::Error> {
-        self.processing_time = ProcessingTime::zero();
         self.population = Rc::new(self.initial_population.individuals().to_vec());
         Ok(true)
     }
@@ -234,54 +205,50 @@ where
 fn evaluate_fitness<G, F, E>(
     population: Rc<Vec<G>>,
     evaluator: &E,
-) -> TimedResult<EvaluatedPopulation<G, F>>
+) -> EvaluatedPopulation<G, F>
 where
     G: Genotype + Sync,
     F: Fitness + Send + Sync,
     E: FitnessFunction<G, F> + Sync,
 {
     let evaluation = par_evaluate_fitness(&population, evaluator);
-    let average = timed(|| evaluator.average(&evaluation.result.0)).run();
+    let average = evaluator.average(&evaluation.0);
     let evaluated = EvaluatedPopulation::new(
         population,
-        evaluation.result.0,
-        evaluation.result.1,
-        evaluation.result.2,
-        average.result,
+        evaluation.0,
+        evaluation.1,
+        evaluation.2,
+        average,
     );
-    TimedResult {
-        result: evaluated,
-        time: evaluation.time + average.time,
-    }
+    evaluated
 }
 
 /// Calculates the `genetic::Fitness` value of each `genetic::Genotype` and
 /// records the highest and lowest values.
 #[cfg(not(target_arch = "wasm32"))]
-fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> TimedResult<(Vec<F>, F, F)>
+fn par_evaluate_fitness<G, F, E>(population: &[G], evaluator: &E) -> (Vec<F>, F, F)
 where
     G: Genotype + Sync,
     F: Fitness + Send + Sync,
     E: FitnessFunction<G, F> + Sync,
 {
     if population.len() < 50 {
-        timed(|| {
-            let mut fitness = Vec::with_capacity(population.len());
-            let mut highest = evaluator.lowest_possible_fitness();
-            let mut lowest = evaluator.highest_possible_fitness();
-            for genome in population.iter() {
-                let score = evaluator.fitness_of(genome);
-                if score > highest {
-                    highest = score.clone();
-                }
-                if score < lowest {
-                    lowest = score.clone();
-                }
-                fitness.push(score);
+        
+        let mut fitness = Vec::with_capacity(population.len());
+        let mut highest = evaluator.lowest_possible_fitness();
+        let mut lowest = evaluator.highest_possible_fitness();
+        for genome in population.iter() {
+            let score = evaluator.fitness_of(genome);
+            if score > highest {
+                highest = score.clone();
             }
-            (fitness, highest, lowest)
-        })
-        .run()
+            if score < lowest {
+                lowest = score.clone();
+            }
+            fitness.push(score);
+        }
+        (fitness, highest, lowest)
+        
     } else {
         let mid_point = population.len() / 2;
         let (l_slice, r_slice) = population.split_at(mid_point);
@@ -290,22 +257,19 @@ where
             || par_evaluate_fitness(r_slice, evaluator),
         );
         let mut fitness = Vec::with_capacity(population.len());
-        fitness.append(&mut left.result.0);
-        fitness.append(&mut right.result.0);
-        let highest = if left.result.1 >= right.result.1 {
-            left.result.1
+        fitness.append(&mut left.0);
+        fitness.append(&mut right.0);
+        let highest = if left.1 >= right.1 {
+            left.1
         } else {
-            right.result.1
+            right.1
         };
-        let lowest = if left.result.2 <= right.result.2 {
-            left.result.2
+        let lowest = if left.2 <= right.2 {
+            left.2
         } else {
-            right.result.2
+            right.2
         };
-        TimedResult {
-            result: (fitness, highest, lowest),
-            time: left.time + right.time,
-        }
+        (fitness, highest, lowest)
     }
 }
 
@@ -339,27 +303,24 @@ where
 fn determine_best_solution<G, F>(
     generation: u64,
     score_board: &EvaluatedPopulation<G, F>,
-) -> TimedResult<BestSolution<G, F>>
+) -> BestSolution<G, F>
 where
     G: Genotype,
     F: Fitness,
-{
-    timed(|| {
-        let evaluated = score_board
-            .evaluated_individual_with_fitness(&score_board.highest_fitness())
-            .unwrap_or_else(|| {
-                panic!(
-                    "No fitness value of {:?} found in this EvaluatedPopulation",
-                    &score_board.highest_fitness()
-                )
-            });
-        BestSolution {
-            found_at: Local::now(),
-            generation,
-            solution: evaluated,
-        }
-    })
-    .run()
+{    
+    let evaluated = score_board
+        .evaluated_individual_with_fitness(&score_board.highest_fitness())
+        .unwrap_or_else(|| {
+            panic!(
+                "No fitness value of {:?} found in this EvaluatedPopulation",
+                &score_board.highest_fitness()
+            )
+        });
+    BestSolution {
+        found_at: Local::now(),
+        generation,
+        solution: evaluated,
+    }   
 }
 
 /// Lets the parents breed their offspring and mutate its children. And
@@ -370,25 +331,24 @@ fn par_breed_offspring<G, C, M>(
     breeder: &C,
     mutator: &M,
     rng: &mut Prng,
-) -> TimedResult<Offspring<G>>
+) -> Offspring<G>
 where
     G: Genotype + Send,
     C: CrossoverOp<G> + Sync,
     M: MutationOp<G> + Sync,
 {
     if parents.len() < 50 {
-        timed(|| {
-            let mut offspring: Offspring<G> = Vec::with_capacity(parents.len() * parents[0].len());
-            for parents in parents {
-                let children = breeder.crossover(parents, rng);
-                for child in children {
-                    let mutated = mutator.mutate(child, rng);
-                    offspring.push(mutated);
-                }
+       
+        let mut offspring: Offspring<G> = Vec::with_capacity(parents.len() * parents[0].len());
+        for parents in parents {
+            let children = breeder.crossover(parents, rng);
+            for child in children {
+                let mutated = mutator.mutate(child, rng);
+                offspring.push(mutated);
             }
-            offspring
-        })
-        .run()
+        }
+        offspring
+       
     } else {
         rng.jump();
         let mut rng1 = rng.clone();
@@ -403,12 +363,9 @@ where
             || par_breed_offspring(l_slice, breeder, mutator, &mut rng1),
             || par_breed_offspring(r_slice, breeder, mutator, &mut rng2),
         );
-        offspring.append(&mut left.result);
-        offspring.append(&mut right.result);
-        TimedResult {
-            result: offspring,
-            time: left.time + right.time,
-        }
+        offspring.append(&mut left);
+        offspring.append(&mut right);
+        offspring
     }
 }
 
