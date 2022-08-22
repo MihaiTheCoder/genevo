@@ -137,7 +137,7 @@ where
         // holds indices to the individuals and fitness_values slices
         let mut old_population_indices: Vec<usize> = (0..old_fitness_values.len()).collect();
         // sort fitness indices from best performing to worst performing index
-        old_population_indices.sort_by(|x, y| old_fitness_values[*y].cmp(&old_fitness_values[*x]));
+        old_population_indices.sort_unstable_by(|x, y| old_fitness_values[*y].cmp(&old_fitness_values[*x]));
 
         let population_size = old_individuals.len();
         let mut new_population: Vec<G> = Vec::with_capacity(population_size);
@@ -155,7 +155,7 @@ where
                     offspring_fitness.push((child, fitness));
                 }
                 // sort offspring from worst to best performing performing
-                offspring_fitness.sort_by(|x, y| x.1.cmp(&y.1));
+                offspring_fitness.sort_unstable_by(|x, y| x.1.cmp(&y.1));
                 // pick only the best individuals from the offspring
                 for _ in 0..num_offspring {
                     new_population.push(offspring_fitness.pop().unwrap().0);

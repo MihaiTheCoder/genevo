@@ -185,8 +185,7 @@ where
         // Stage 3: The making of a new population:
         let selection = self.selector.select_from(&evaluation, rng);
         let mut breeding = par_breed_offspring(selection, &self.breeder, &self.mutator, rng);
-        let reinsertion = self.reinserter
-                .combine(&mut breeding, &evaluation, rng);
+        let reinsertion = self.reinserter.combine(&mut breeding, &evaluation, rng);
 
 
         // Stage 4: On to the next generation:
@@ -252,30 +251,6 @@ where
 
     (fitness, highest, lowest, evaluated)
 
-}
-
-/// Determines the best solution of the current population
-fn determine_best_solution<G, F>(
-    generation: u64,
-    score_board: &EvaluatedPopulation<G, F>,
-) -> BestSolution<G, F>
-where
-    G: Genotype,
-    F: Fitness,
-{    
-    let evaluated = score_board
-        .evaluated_individual_with_fitness(&score_board.highest_fitness())
-        .unwrap_or_else(|| {
-            panic!(
-                "No fitness value of {:?} found in this EvaluatedPopulation",
-                &score_board.highest_fitness()
-            )
-        });
-    BestSolution {
-        found_at: Local::now(),
-        generation,
-        solution: evaluated,
-    }   
 }
 
 /// Lets the parents breed their offspring and mutate its children. And
