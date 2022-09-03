@@ -25,7 +25,7 @@ pub use self::combinator::{and, or};
 
 pub mod limit;
 
-use crate::{algorithm::Algorithm, simulation::State};
+use crate::{algorithm::Algorithm, simulation::State, genetic::Genotype};
 
 /// The `StopFlag` is the result of the `Termination` function. It tells
 /// the simulation whether it shall stop or if it can continue.
@@ -53,9 +53,10 @@ pub type StopReason = String;
 /// One implementation of the trait `Termination` should only handle one
 /// single termination condition. In the simulation multiple termination
 /// conditions can be combined through `combinator`s.
-pub trait Termination<A>
+pub trait Termination<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
     /// Evaluates the termination condition and returns a `StopFlag` depending
     /// on the result. The `StopFlag` indicates whether the simulation shall
@@ -65,7 +66,7 @@ where
     /// returned also a the reason why the simulation shall be stopped is
     /// returned. This reason should explain to the user of the simulation,
     /// why the simulation has been stopped.
-    fn evaluate(&mut self, state: &State<A>) -> StopFlag;
+    fn evaluate(&mut self, state: &State<A, G>) -> StopFlag;
 
     /// Resets the state of this `Termination` condition. This function is
     /// called on each `Termination` instance when the simulation is reset.

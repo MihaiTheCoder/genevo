@@ -1,46 +1,50 @@
 use crate::{
-    algorithm::Algorithm,
+    algorithm::{Algorithm, MemReuse},
     random::{get_rng, random_seed, Prng, Seed},
     simulation::{SimResult, Simulation, SimulationBuilder, State},
-    termination::{StopFlag, Termination},
+    termination::{StopFlag, Termination}, genetic::Genotype,
 };
 use chrono::{DateTime, Local};
 use std::{
     error::Error,
     fmt::{self, Debug, Display},
-    hash::Hash,
+    hash::Hash, marker::PhantomData,
 };
 
 /// The `simulate` function creates a new `Simulator` for the given
 /// `algorithm::Algorithm`.
-pub fn simulate<A>(algorithm: A) -> SimulatorBuilderWithAlgorithm<A>
+pub fn simulate<A, G>(algorithm: A) -> SimulatorBuilderWithAlgorithm<A,G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    SimulatorBuilderWithAlgorithm { algorithm }
+    SimulatorBuilderWithAlgorithm { algorithm, _phantom: PhantomData }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SimulatorBuilder<A, T>
+pub struct SimulatorBuilder<A, T, G>
 where
-    A: Algorithm,
-    T: Termination<A>,
+    A: Algorithm<G>,
+    T: Termination<A, G>,
+    G:Genotype
 {
     algorithm: A,
     termination: T,
+    _phantom: PhantomData<G>
 }
 
-impl<A, T> SimulationBuilder<Simulator<A, T>, A> for SimulatorBuilder<A, T>
+impl<A, T, G> SimulationBuilder<Simulator<A, T, G>, A, G> for SimulatorBuilder<A, T, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
-    T: Termination<A>,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: Eq + Hash + Display + Send + Sync,
+    T: Termination<A, G>,
+    G: Genotype
 {
-    fn build(self) -> Simulator<A, T> {
+    fn build(self) -> Simulator<A, T, G> {
         self.build_with_seed(random_seed())
     }
 
-    fn build_with_seed(self, seed: Seed) -> Simulator<A, T> {
+    fn build_with_seed(self, seed: Seed) -> Simulator<A, T, G> {
         Simulator {
             algorithm: self.algorithm,
             termination: self.termination,
@@ -48,29 +52,34 @@ where
             rng: get_rng(seed),
             started_at: Local::now(),
             iteration: 0,
+            mem_reuse: MemReuse::new()
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SimulatorBuilderWithAlgorithm<A>
+pub struct SimulatorBuilderWithAlgorithm<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
     algorithm: A,
+    _phantom: PhantomData<G>
 }
 
-impl<A> SimulatorBuilderWithAlgorithm<A>
+impl<A, G> SimulatorBuilderWithAlgorithm<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    pub fn until<T>(self, termination: T) -> SimulatorBuilder<A, T>
+    pub fn until<T>(self, termination: T) -> SimulatorBuilder<A, T, G>
     where
-        T: Termination<A>,
+        T: Termination<A, G>,
     {
         SimulatorBuilder {
             algorithm: self.algorithm,
             termination,
+            _phantom:PhantomData
         }
     }
 }
@@ -90,19 +99,21 @@ enum RunMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum SimError<A>
+pub enum SimError<A, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: Eq + Hash + Debug,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: Eq + Hash + Debug,
+    G: Genotype
 {
-    AlgorithmError(<A as Algorithm>::Error),
+    AlgorithmError(<A as Algorithm<G>>::Error),
     SimulationAlreadyRunning(String),
 }
 
-impl<A> Display for SimError<A>
+impl<A, G> Display for SimError<A, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: Eq + Hash + Debug + Display,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: Eq + Hash + Debug + Display,
+    G: Genotype
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -114,10 +125,11 @@ where
     }
 }
 
-impl<A> Error for SimError<A>
+impl<A, G> Error for SimError<A, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: 'static + Eq + Hash + Debug + Display,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: 'static + Eq + Hash + Debug + Display,
+    G: Genotype
 {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
@@ -128,10 +140,12 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct Simulator<A, T>
+pub struct Simulator<A, T, G>
 where
-    A: Algorithm,
-    T: Termination<A>,
+    G: Genotype,
+    A: Algorithm<G>,
+    T: Termination<A, G>,
+    
 {
     algorithm: A,
     termination: T,
@@ -139,24 +153,27 @@ where
     rng: Prng,
     started_at: DateTime<Local>,
     iteration: u64,
+    mem_reuse: MemReuse<G>
 }
 
-impl<A, T> Simulator<A, T>
+impl<A, T, G> Simulator<A, T, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
-    T: Termination<A>,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: Eq + Hash + Display + Send + Sync,
+    T: Termination<A, G>,
+    G: Genotype
 {
+
     pub fn termination(&self) -> &T {
         &self.termination
     }
 
     /// Processes one iteration of the algorithm used in this simulation.
-    fn process_one_iteration(&mut self) -> Result<State<A>, <Self as Simulation<A>>::Error> {
+    fn process_one_iteration(&mut self) -> Result<State<A, G>, <Self as Simulation<A, G>>::Error> {
         let loop_started_at = Local::now();
 
         self.iteration += 1;
-        let result = self.algorithm.next(self.iteration, &mut self.rng);
+        let result = self.algorithm.next(self.iteration, &mut self.rng, &mut self.mem_reuse);
 
         let loop_duration = Local::now().signed_duration_since(loop_started_at);
         match result {
@@ -171,15 +188,16 @@ where
     }
 }
 
-impl<A, T> Simulation<A> for Simulator<A, T>
+impl<A, T, G> Simulation<A, G> for Simulator<A, T, G>
 where
-    A: Algorithm + Debug,
-    <A as Algorithm>::Error: Eq + Hash + Display + Send + Sync,
-    T: Termination<A>,
+    A: Algorithm<G> + Debug,
+    <A as Algorithm<G>>::Error: Eq + Hash + Display + Send + Sync,
+    T: Termination<A, G>,
+    G: Genotype
 {
-    type Error = SimError<A>;
+    type Error = SimError<A, G>;
 
-    fn run(&mut self) -> Result<SimResult<A>, Self::Error> {
+    fn run(&mut self) -> Result<SimResult<A, G>, Self::Error> {
         match self.run_mode {
             RunMode::Loop => {
                 return Err(SimError::SimulationAlreadyRunning(format!(
@@ -219,7 +237,7 @@ where
         result
     }
 
-    fn step(&mut self) -> Result<SimResult<A>, Self::Error> {
+    fn step(&mut self) -> Result<SimResult<A, G>, Self::Error> {
         match self.run_mode {
             RunMode::Loop => {
                 return Err(SimError::SimulationAlreadyRunning(format!(

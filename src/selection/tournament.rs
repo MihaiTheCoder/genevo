@@ -6,7 +6,7 @@
 use crate::{
     algorithm::EvaluatedPopulation,
     genetic::{Fitness, Genotype, Parents},
-    operator::{GeneticOperator, MultiObjective, SelectionOp, SingleObjective},
+    operator::{GeneticOperator, MultiObjective, SelectionOp, SingleObjective, SelectOpCount},
     random::{random_index, random_probability, Rng},
 };
 
@@ -153,7 +153,8 @@ where
     G: Genotype,
     F: Fitness,
 {
-    fn select_from<R>(&self, evaluated: &EvaluatedPopulation<G, F>, rng: &mut R) -> Vec<Parents<G>>
+
+    fn select_from<R>(&self, evaluated: &EvaluatedPopulation<G, F>, rng: &mut R, counts: SelectOpCount, selected: &mut Vec<Parents<G>>)
     where
         R: Rng + Sized,
     {
@@ -163,9 +164,7 @@ where
         // mating pool holds indices to the individuals and fitness_values slices
         let mut mating_pool: Vec<usize> = (0..fitness_values.len()).collect();
 
-        let num_parents_to_select =
-            (individuals.len() as f64 * self.selection_ratio + 0.5).floor() as usize;
-        let target_num_candidates = num_parents_to_select * self.num_individuals_per_parents;
+        let target_num_candidates = counts.num_of_parents * counts.num_individuals_per_parent;
 
         // select candidates for parents
         let mut picked_candidates = Vec::with_capacity(target_num_candidates);
@@ -184,7 +183,7 @@ where
                 break;
             }
             // sort tournament from best performing to worst performing index
-            tournament.sort_by(|x, y| fitness_values[*y].cmp(&fitness_values[*x]));
+            tournament.sort_unstable_by(|x, y| fitness_values[*y].cmp(&fitness_values[*x]));
             // pick candidates with probability
             let mut prob = self.probability;
             let mut prob_redux = 1.;
@@ -204,16 +203,25 @@ where
             }
         }
         // convert selected candidate indices to parents of individuals
-        let mut selected: Vec<Parents<G>> = Vec::with_capacity(num_parents_to_select);
+        let mut i = 0;
         while !picked_candidates.is_empty() {
-            let mut tuple = Vec::with_capacity(self.num_individuals_per_parents);
             for _ in 0..self.num_individuals_per_parents {
                 // index into individuals slice
                 let index_i = picked_candidates.remove(0);
-                tuple.push(individuals[index_i].clone());
+                selected[i].push(individuals[index_i].clone());
             }
-            selected.push(tuple);
+            i += 1;
         }
-        selected
+
+        while i < selected.len() {
+            selected.remove(i);
+            i += 1;
+        }
+        
+    }
+
+    fn get_counts(&self, individuals_count: usize) -> SelectOpCount {
+        let num_of_parents = (individuals_count as f64 * self.selection_ratio + 0.5).floor() as usize;
+        return SelectOpCount { num_of_parents, num_individuals_per_parent: self.num_individuals_per_parents }
     }
 }

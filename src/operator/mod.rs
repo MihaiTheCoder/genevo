@@ -42,6 +42,12 @@ pub trait GeneticOperator: Clone {
     fn name() -> String;
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SelectOpCount {
+    pub num_of_parents: usize,
+    pub num_individuals_per_parent: usize
+}
+
 /// A `SelectionOp` defines the function of how to select solutions for being
 /// the parents of the next generation.
 pub trait SelectionOp<G, F>: GeneticOperator
@@ -49,13 +55,16 @@ where
     G: Genotype,
     F: Fitness,
 {
+    fn get_counts(&self, individuals_count: usize) -> SelectOpCount;
     /// Selects individuals from the given population according to the
     /// implemented selection strategy.
     fn select_from<R>(
         &self,
         population: &EvaluatedPopulation<G, F>,
-        rng: &mut R,
-    ) -> Vec<Parents<G>>
+        rng: &mut R,        
+        counts: SelectOpCount,
+        selection: &mut Vec<Parents<G>>
+    )
     where
         R: Rng + Sized;
 }

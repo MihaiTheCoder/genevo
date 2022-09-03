@@ -53,7 +53,7 @@ where
     }
 }
 
-impl<G, F, E, S, C, M, R> Termination<GeneticAlgorithm<G, F, E, S, C, M, R>> for FitnessLimit<G, F>
+impl<G, F, E, S, C, M, R> Termination<GeneticAlgorithm<G, F, E, S, C, M, R>, G> for FitnessLimit<G, F>
 where
     G: Genotype,
     F: Fitness + Send + Sync,
@@ -64,7 +64,7 @@ where
     M: MutationOp<G> + Sync,
     R: ReinsertionOp<G, F>,
 {
-    fn evaluate(&mut self, state: &State<GeneticAlgorithm<G, F, E, S, C, M, R>>) -> StopFlag {
+    fn evaluate(&mut self, state: &State<GeneticAlgorithm<G, F, E, S, C, M, R>, G>) -> StopFlag {
         let highest_fitness = &state.result.best_solution.solution.fitness;
         if *highest_fitness >= self.fitness_target {
             StopFlag::StopNow(format!(
@@ -99,11 +99,12 @@ impl GenerationLimit {
     }
 }
 
-impl<A> Termination<A> for GenerationLimit
+impl<A, G> Termination<A, G> for GenerationLimit
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    fn evaluate(&mut self, state: &State<A>) -> StopFlag {
+    fn evaluate(&mut self, state: &State<A, G>) -> StopFlag {
         if state.iteration >= self.max_generations {
             StopFlag::StopNow(format!(
                 "Simulation stopped after the limit of {} generations have \
@@ -139,11 +140,12 @@ impl TimeLimit {
     }
 }
 
-impl<A> Termination<A> for TimeLimit
+impl<A, G> Termination<A, G> for TimeLimit
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    fn evaluate(&mut self, state: &State<A>) -> StopFlag {
+    fn evaluate(&mut self, state: &State<A, G>) -> StopFlag {
         let duration = Local::now().signed_duration_since(state.started_at);
         if duration >= self.max_time {
             StopFlag::StopNow(format!(

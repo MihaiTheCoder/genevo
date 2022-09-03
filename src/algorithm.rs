@@ -3,20 +3,67 @@
 //! operators as defined in the `operator` module.
 
 use crate::{
-    genetic::{Fitness, Genotype},
+    genetic::{Fitness, Genotype, Offspring, Parents},
     random::Prng,
 };
 use chrono::{DateTime, Local};
-use std::{error::Error, fmt::Debug};
+use std::{error::Error, fmt::Debug, collections::VecDeque};
+
+#[derive(Debug, Clone)]
+pub struct MemReuse<G> where 
+    G: Genotype {
+    
+    pub breeding: VecDeque<Offspring<G>>,
+    pub selection: VecDeque<Vec<Parents<G>>>
+}
+
+
+impl<G> MemReuse<G> where G: Genotype {
+    pub fn new() -> Self {
+        Self { breeding: VecDeque::new(), selection: VecDeque::new() }
+    }
+
+    pub fn get_breeding(self: &mut Self, capacity: usize) -> Offspring<G> { 
+        return match self.breeding.pop_front() {
+            Some(v) => {v},
+            None => {Vec::with_capacity(capacity)},
+        };
+    }
+
+    pub fn add_breeding(self: &mut Self, mut value: Offspring<G>) {
+        value.clear();
+        self.breeding.push_front(value);
+    }
+
+    pub fn get_selections(self: &mut Self, num_parents_to_select: usize, num_individuals_per_parents: usize) -> Vec<Parents<G>> { 
+        return match self.selection.pop_front() {
+            Some(v) => {v},
+            None => {
+                let mut parents = Vec::with_capacity(num_parents_to_select);
+                for _ in 0..num_parents_to_select {
+                    parents.push(Vec::with_capacity(num_individuals_per_parents))
+                }
+                return parents;
+            },
+        };
+    }
+
+    pub fn add_selections(self: &mut Self, mut selection: Vec<Parents<G>>) {
+        for parent in selection.iter_mut() {
+            parent.clear();
+        }
+        self.selection.push_front(selection);
+    }
+}
 
 /// An `Algorithm` defines the steps to be processed in a
 /// `simulation::Simulation`. The `Simulation` uses an implementation of an
 /// `Algorithm` to perform one iteration of the evaluation stage.
-pub trait Algorithm {
+pub trait Algorithm<G> where G: Genotype {
     type Output: Clone + Debug + PartialEq;
     type Error: Error + Clone + Debug + PartialEq;
 
-    fn next(&mut self, iteration: u64, rng: &mut Prng) -> Result<Self::Output, Self::Error>;
+    fn next(&mut self, iteration: u64, rng: &mut Prng, mem_reuse: &mut MemReuse<G> ) -> Result<Self::Output, Self::Error>;
 
     fn reset(&mut self) -> Result<bool, Self::Error>;
 }

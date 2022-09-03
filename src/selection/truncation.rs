@@ -8,7 +8,7 @@
 use crate::{
     algorithm::EvaluatedPopulation,
     genetic::{Fitness, Genotype, Parents},
-    operator::{GeneticOperator, MultiObjective, SelectionOp, SingleObjective},
+    operator::{GeneticOperator, MultiObjective, SelectionOp, SingleObjective, SelectOpCount},
     random::Rng,
 };
 
@@ -83,7 +83,7 @@ where
     G: Genotype,
     F: Fitness,
 {
-    fn select_from<R>(&self, evaluated: &EvaluatedPopulation<G, F>, _: &mut R) -> Vec<Parents<G>>
+    fn select_from<R>(&self, evaluated: &EvaluatedPopulation<G, F>, _: &mut R, counts: SelectOpCount, selected: &mut Vec<Parents<G>>)
     where
         R: Rng + Sized,
     {
@@ -96,24 +96,23 @@ where
         mating_pool.sort_by(|x, y| fitness_values[*y].cmp(&fitness_values[*x]));
         let mating_pool = mating_pool;
 
-        let num_parents_to_select =
-            (individuals.len() as f64 * self.selection_ratio + 0.5).floor() as usize;
         let pool_size = mating_pool.len();
-        let mut selected: Vec<Parents<G>> = Vec::with_capacity(num_parents_to_select);
 
         let mut index_m = 0;
-        for _ in 0..num_parents_to_select {
-            let mut tuple = Vec::with_capacity(self.num_individuals_per_parents);
-            for _ in 0..self.num_individuals_per_parents {
+        for i in 0..counts.num_of_parents {
+            for _ in 0..counts.num_individuals_per_parent {
                 // index into mating pool
                 index_m %= pool_size;
                 // index into individuals slice
                 let index_i = mating_pool[index_m];
-                tuple.push(individuals[index_i].clone());
+                selected[i].push(individuals[index_i].clone());
                 index_m += 1;
             }
-            selected.push(tuple);
-        }
-        selected
+        }        
+    }
+
+    fn get_counts(&self, individuals_count: usize) -> SelectOpCount {
+        let num_of_parents = (individuals_count as f64 * self.selection_ratio + 0.5).floor() as usize;
+        return SelectOpCount { num_of_parents, num_individuals_per_parent: self.num_individuals_per_parents }
     }
 }

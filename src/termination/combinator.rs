@@ -1,44 +1,49 @@
 use crate::{
     algorithm::Algorithm,
     simulation::State,
-    termination::{StopFlag, Termination},
+    termination::{StopFlag, Termination}, genetic::Genotype,
 };
 use std::marker::PhantomData;
 
 // TODO add doc comments
-pub fn and<T1, T2, A>(condition1: T1, condition2: T2) -> And<T1, T2, A>
+pub fn and<T1, T2, A, G>(condition1: T1, condition2: T2) -> And<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     And::new(condition1, condition2)
 }
 
 // TODO add doc comments
 #[derive(Clone, Debug, PartialEq)]
-pub struct And<T1, T2, A>
+pub struct And<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     condition1: T1,
     condition2: T2,
     _a: PhantomData<A>,
+    _phantom_data: PhantomData<G>
 }
 
-impl<T1, T2, A> And<T1, T2, A>
+impl<T1, T2, A, G> And<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     pub fn new(condition1: T1, condition2: T2) -> Self {
         And {
             condition1,
             condition2,
             _a: PhantomData,
+            _phantom_data: PhantomData
         }
     }
 
@@ -51,13 +56,14 @@ where
     }
 }
 
-impl<T1, T2, A> Termination<A> for And<T1, T2, A>
+impl<T1, T2, A, G> Termination<A, G> for And<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    fn evaluate(&mut self, state: &State<A>) -> StopFlag {
+    fn evaluate(&mut self, state: &State<A, G>) -> StopFlag {
         let mut reasons = Vec::with_capacity(2);
         match self.condition1.evaluate(state) {
             StopFlag::StopNow(reason) => reasons.push(reason),
@@ -75,39 +81,44 @@ where
 }
 
 // TODO add doc comments
-pub fn or<T1, T2, A>(condition1: T1, condition2: T2) -> Or<T1, T2, A>
+pub fn or<T1, T2, A, G>(condition1: T1, condition2: T2) -> Or<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     Or::new(condition1, condition2)
 }
 
 // TODO add doc comments
 #[derive(Clone, Debug, PartialEq)]
-pub struct Or<T1, T2, A>
+pub struct Or<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     condition1: T1,
     condition2: T2,
     _a: PhantomData<A>,
+    _phantom_data: PhantomData<G>
 }
 
-impl<T1, T2, A> Or<T1, T2, A>
+impl<T1, T2, A, G> Or<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     pub fn new(condition1: T1, condition2: T2) -> Self {
         Or {
             condition1,
             condition2,
             _a: PhantomData,
+            _phantom_data: PhantomData
         }
     }
 
@@ -120,13 +131,14 @@ where
     }
 }
 
-impl<T1, T2, A> Termination<A> for Or<T1, T2, A>
+impl<T1, T2, A, G> Termination<A, G> for Or<T1, T2, A, G>
 where
-    T1: Termination<A>,
-    T2: Termination<A>,
-    A: Algorithm,
+    T1: Termination<A, G>,
+    T2: Termination<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
-    fn evaluate(&mut self, state: &State<A>) -> StopFlag {
+    fn evaluate(&mut self, state: &State<A, G>) -> StopFlag {
         let mut reasons = Vec::with_capacity(2);
         match self.condition1.evaluate(state) {
             StopFlag::StopNow(reason) => reasons.push(reason),

@@ -1,24 +1,25 @@
 pub mod simulator;
 
 use crate::{
-    algorithm::Algorithm, random::Seed, termination::StopReason,
+    algorithm::Algorithm, random::Seed, termination::StopReason, genetic::Genotype,
 };
 use chrono::{DateTime, Duration, Local};
 
 /// A `Simulation` is the execution of an algorithm.
-pub trait Simulation<A>
+pub trait Simulation<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
     type Error;
 
     /// Runs this simulation completely. The simulation ends when the
     /// termination criteria are met.
-    fn run(&mut self) -> Result<SimResult<A>, Self::Error>;
+    fn run(&mut self) -> Result<SimResult<A,G>, Self::Error>;
 
     /// Makes one step in this simulation. One step in the simulation performs
     /// one time the complete loop of the genetic algorithm.
-    fn step(&mut self) -> Result<SimResult<A>, Self::Error>;
+    fn step(&mut self) -> Result<SimResult<A, G>, Self::Error>;
 
     /// Stops the simulation after the current loop is finished.
     fn stop(&mut self) -> Result<bool, Self::Error>;
@@ -31,10 +32,11 @@ where
 
 /// The `SimulationBuilder` creates a new `Simulation` with given parameters
 /// and options. It forms the initialization stage of the algorithm.
-pub trait SimulationBuilder<S, A>
+pub trait SimulationBuilder<S, A, G>
 where
-    S: Simulation<A>,
-    A: Algorithm,
+    S: Simulation<A, G>,
+    A: Algorithm<G>,
+    G: Genotype
 {
     /// Finally build the simulation.
     fn build(self) -> S;
@@ -49,9 +51,10 @@ where
 
 /// The `State` struct holds the state of the `Simulation`.
 #[derive(Debug, PartialEq)]
-pub struct State<A>
+pub struct State<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
     /// The local time when this simulation started.
     pub started_at: DateTime<Local>,
@@ -63,24 +66,25 @@ where
     /// took to process one iteration of the algorithm.
     pub duration: Duration,
     /// The result of this iteration.
-    pub result: <A as Algorithm>::Output,
+    pub result: <A as Algorithm<G>>::Output,
 }
 
 /// The result of running a step in the `Simulation`.
 #[derive(Debug, PartialEq)]
-pub enum SimResult<A>
+pub enum SimResult<A, G>
 where
-    A: Algorithm,
+    A: Algorithm<G>,
+    G: Genotype
 {
     /// The step was successful, but the simulation has not finished.
     ///
     /// The `State` contains the result of the last processed generation.
-    Intermediate(State<A>),
+    Intermediate(State<A, G>),
     /// The simulation is finished, and this is the final result.
     ///
     /// The parameters are:
     /// * The `State` of last processed generation.
     /// * The total processing time of the simulation.
     /// * The `StopReason` is the matching criteria why the simulation stopped.
-    Final(State<A>, Duration, StopReason),
+    Final(State<A, G>, Duration, StopReason),
 }

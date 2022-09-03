@@ -179,7 +179,7 @@ where
                 offspring_fitness.push((child, fitness));
             }
             // sort offspring from worst to best performing performing
-            offspring_fitness.sort_by(|x, y| x.1.cmp(&y.1));
+            offspring_fitness.sort_unstable_by(|x, y| x.1.cmp(&y.1));
             for _ in 0..population_size {
                 // compare fitness of best offspring with best fitness of old population
                 let index_old = old_population_indices[0];
