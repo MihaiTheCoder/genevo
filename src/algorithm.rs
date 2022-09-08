@@ -7,52 +7,49 @@ use crate::{
     random::Prng,
 };
 use chrono::{DateTime, Local};
-use std::{error::Error, fmt::Debug, collections::VecDeque};
+use std::{error::Error, fmt::Debug};
 
 #[derive(Debug, Clone)]
 pub struct MemReuse<G> where 
     G: Genotype {
     
-    pub breeding: VecDeque<Offspring<G>>,
-    pub selection: VecDeque<Vec<Parents<G>>>
+    pub breeding: Option<Offspring<G>>,
+    pub selection: Option<Vec<Parents<G>>>
 }
 
 
 impl<G> MemReuse<G> where G: Genotype {
     pub fn new() -> Self {
-        Self { breeding: VecDeque::new(), selection: VecDeque::new() }
+        Self { breeding: None, selection: None }
     }
 
-    pub fn get_breeding(self: &mut Self, capacity: usize) -> Offspring<G> { 
-        return match self.breeding.pop_front() {
-            Some(v) => {v},
-            None => {Vec::with_capacity(capacity)},
-        };
-    }
 
-    pub fn add_breeding(self: &mut Self, mut value: Offspring<G>) {
-        value.clear();
-        self.breeding.push_front(value);
-    }
-
-    pub fn get_selections(self: &mut Self, num_parents_to_select: usize, num_individuals_per_parents: usize) -> Vec<Parents<G>> { 
-        return match self.selection.pop_front() {
-            Some(v) => {v},
-            None => {
-                let mut parents = Vec::with_capacity(num_parents_to_select);
+    pub fn get_breeding_and_parents(self: &mut Self, num_parents_to_select: usize, num_individuals_per_parents: usize) -> (&mut Offspring<G>, &mut Vec<Parents<G>>) { 
+        if self.selection.is_none() {
+            let mut parents = Vec::with_capacity(num_parents_to_select);
                 for _ in 0..num_parents_to_select {
                     parents.push(Vec::with_capacity(num_individuals_per_parents))
                 }
-                return parents;
-            },
-        };
+                self.selection = Some(parents);
+        }
+        if self.breeding.is_none() {
+            self.breeding = Some(Vec::with_capacity(num_parents_to_select*num_individuals_per_parents));
+        }
+        (self.breeding.as_mut().unwrap(), self.selection.as_mut().unwrap())
     }
 
-    pub fn add_selections(self: &mut Self, mut selection: Vec<Parents<G>>) {
-        for parent in selection.iter_mut() {
+    pub fn clear_breeding_and_selections(self: &mut Self) {
+        if self.breeding.is_some() {
+            self.breeding.as_mut().unwrap().clear();
+        }
+
+        if self.selection.is_none() {
+            return ;
+        }
+
+        for parent in self.selection.as_mut().unwrap().iter_mut() {
             parent.clear();
         }
-        self.selection.push_front(selection);
     }
 }
 

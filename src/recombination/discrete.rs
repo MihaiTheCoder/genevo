@@ -45,7 +45,7 @@ impl<V> CrossoverOp<Vec<V>> for UniformCrossBreeder
 where
     V: Clone + Debug + PartialEq + Send + Sync,
 {
-    fn crossover<R>(&self, parents: Parents<Vec<V>>, rng: &mut R) -> Children<Vec<V>>
+    fn crossover<R>(&self, parents: &mut Parents<Vec<V>>, rng: &mut R) -> Children<Vec<V>>
     where
         R: Rng + Sized,
     {
@@ -167,7 +167,7 @@ impl<G> CrossoverOp<G> for SinglePointCrossBreeder
 where
     G: Genotype + MultiPointCrossover,
 {
-    fn crossover<R>(&self, parents: Parents<G>, rng: &mut R) -> Children<G>
+    fn crossover<R>(&self, parents: &mut Parents<G>, rng: &mut R) -> Children<G>
     where
         R: Rng + Sized,
     {
@@ -215,7 +215,7 @@ impl<G> CrossoverOp<G> for MultiPointCrossBreeder
 where
     G: Genotype + MultiPointCrossover,
 {
-    fn crossover<R>(&self, parents: Parents<G>, rng: &mut R) -> Children<G>
+    fn crossover<R>(&self, parents: &mut Parents<G>, rng: &mut R) -> Children<G>
     where
         R: Rng + Sized,
     {
@@ -226,7 +226,7 @@ where
 pub trait MultiPointCrossover: Genotype {
     type Dna;
 
-    fn crossover<R>(parents: Parents<Self>, num_cut_points: usize, rng: &mut R) -> Children<Self>
+    fn crossover<R>(parents: &mut Parents<Self>, num_cut_points: usize, rng: &mut R) -> Children<Self>
     where
         R: Rng + Sized;
 }
@@ -237,7 +237,7 @@ where
 {
     type Dna = V;
 
-    fn crossover<R>(parents: Parents<Self>, num_cut_points: usize, rng: &mut R) -> Children<Self>
+    fn crossover<R>(parents: &mut Parents<Self>, num_cut_points: usize, rng: &mut R) -> Children<Self>
     where
         R: Rng + Sized,
     {

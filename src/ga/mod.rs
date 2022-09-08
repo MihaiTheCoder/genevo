@@ -184,13 +184,13 @@ where
 
         // Stage 3: The making of a new population:
         let counts = self.selector.get_counts(evaluation.individuals().len());
-        let mut selection =  mem_reuse.get_selections(counts.num_of_parents, counts.num_individuals_per_parent);
+        let (mut breeding, mut selection) =  mem_reuse.get_breeding_and_parents(counts.num_of_parents, counts.num_individuals_per_parent);
         self.selector.select_from(&evaluation, rng, counts, &mut selection);
 
-        let mut breeding = mem_reuse.get_breeding(selection.len() * selection[0].len());
+        
         par_breed_offspring(selection, &self.breeder, &self.mutator, rng, &mut breeding);
         let reinsertion = self.reinserter.combine(&mut breeding, &evaluation, rng);
-        mem_reuse.add_breeding(breeding);
+        mem_reuse.clear_breeding_and_selections();
 
         // Stage 4: On to the next generation:
         let next_generation = reinsertion;
@@ -261,7 +261,7 @@ where
 /// finally combines the offspring of all parents into one big offspring.
 
 fn par_breed_offspring<G, C, M>(
-    parents: Vec<Parents<G>>,
+    parents: &mut Vec<Parents<G>>,
     breeder: &C,
     mutator: &M,
     rng: &mut Prng,

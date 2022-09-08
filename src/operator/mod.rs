@@ -80,7 +80,7 @@ where
 {
     /// Performs the crossover of the `genetic::Parents` and returns the result
     /// as a new vector of `genetic::Genotype` - the `genetic::Children`.
-    fn crossover<R>(&self, parents: Parents<G>, rng: &mut R) -> Children<G>
+    fn crossover<R>(&self, parents: &mut Parents<G>, rng: &mut R) -> Children<G>
     where
         R: Rng + Sized;
 }
